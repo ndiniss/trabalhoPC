@@ -1,2 +1,2 @@
 # trabalhoPC
-Simple repo for 2nd concurrent programming class
+Simple repo for 2nd project of concurrent programming class
