@@ -70,6 +70,7 @@ public class HSet0<E> implements IHSet<E> {
   @Override
   public synchronized boolean contains(E elem) {
     // TODO: implement this method
+    // Heeeeel Yeah!
     return false;
   }
 
