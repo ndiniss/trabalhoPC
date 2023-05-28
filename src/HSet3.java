@@ -87,9 +87,15 @@ public class HSet3<E> implements IHSet<E> {
     private Node<E> getEntry(E elem) {
         return table[getEntryIndex(elem)];
     }
+    private Node<E> getEntryFromTable(E elem, Node<E>[] tab) {
+        return tab[getEntryIndexFromTable(elem, tab)];
+    }
 
     private int getEntryIndex(E elem) {
         return Math.abs(elem.hashCode() % table.length);
+    }
+    private int getEntryIndexFromTable(E elem, Node<E>[] tab){
+        return Math.abs(elem.hashCode() % tab.length);
     }
 
     private Node<E> getNodeElement(Node<E> node, E value) {
@@ -202,18 +208,31 @@ public class HSet3<E> implements IHSet<E> {
             Node<E>[] newTable = Node.createTable(2 * oldTable.length);
 
             for (Node<E> node : oldTable) {
-                Node<E> searcNode = node;
-                while(!searcNode.next.equals(null)) {
-                    
-                    searcNode = searcNode.next;
+                if (node.equals(null)) { continue; }
+
+                Node<E> searchNode = node;
+                while(!searchNode.next.equals(null)) {
+                    addIntoTable(newTable, searchNode.elem);
+                    searchNode = searchNode.next;
                 }
-                for (E elem : list ) {
-                    getEntry(elem).add(elem);
-                }
+                addIntoTable(newTable, searchNode.elem);
             }
             table = newTable;
         } finally {
             unlockAllLocks();
+        }
+    }
+
+    private void addIntoTable(Node<E>[] tab, E elem){
+        Node<E> node = getEntryFromTable(elem, tab);
+        if (node.equals(null)) {
+            node = new Node<E>(elem, null);
+            tab[getEntryIndexFromTable(elem, tab)] = node; 
+        } else {
+            while(!node.next.equals(null)){
+                node = node.next;
+            }
+            node.next = new Node<E>(elem, null);
         }
     }
 }
