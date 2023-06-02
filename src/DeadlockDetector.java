@@ -7,71 +7,76 @@ import java.util.HashSet;
 public class DeadlockDetector extends Thread {
 
   public static final DeadlockDetector INSTANCE = new DeadlockDetector();
+  private final HashSet<Long> threads_to_ignore = new HashSet<>();
+  private final ThreadMXBean mxbean;
+  private static final int MAX_RETRIES = 10; // Max retries before concluding it's a deadlock!
+  private static final long POLLING_INTERVAL_MS = 100L; // Polling interval (ms)
 
   public static void enable() {
-    INSTANCE.start();
+    if (! INSTANCE.isAlive())
+      INSTANCE.start();
   }
 
   private DeadlockDetector() {
     super("DeadlockDetector");
     setDaemon(true);
+    mxbean = ManagementFactory.getThreadMXBean();
+    for (ThreadInfo ti : mxbean.dumpAllThreads(false, false)) {
+      if (!ti.getThreadName().equals("main")) {
+        threads_to_ignore.add(ti.getThreadId());
+      }
+    }
   }
-  
+
   @Override
   public void run() {
-    // Initialize.
-    // Note: this procedure is fragile and will not work
-    // in all JVMs and all contexts of use.
-    ThreadMXBean mxbean = ManagementFactory.getThreadMXBean();
-    HashSet<String> ignore = new HashSet<>();
-    for (ThreadInfo ti : mxbean.dumpAllThreads(false, false)) {
-      ignore.add(ti.getThreadName());
-    }
-    ignore.remove("main");
-    ignore.add("DestroyJavaVM");
-    
-    // Loop until a deadlock is detected
-    boolean deadlock = false;
-    while (! deadlock) {
+    threads_to_ignore.add(Thread.currentThread().getId());
+    int deadlock_suspected = 0;
+    while (true) {
       try {
-        Thread.sleep(1000);
+        Thread.sleep(POLLING_INTERVAL_MS);
       }
       catch(InterruptedException e) {
         throw new RuntimeException("Unexpected interrupt");
       }
-      deadlock = true;
-      ArrayList<ThreadInfo> stucked = new ArrayList<>();
+      boolean deadlock = true;
+      ArrayList<ThreadInfo> stuck = new ArrayList<>();
       for (ThreadInfo ti : mxbean.dumpAllThreads(false, false)) {
-        if (ignore.contains(ti.getThreadName())) {
-          continue; 
+        if (threads_to_ignore.contains(ti.getThreadId())) {
+          continue;
         }
-        // D.print("%s -> %s",
-        //         ti.getThreadName() + " " + ti.getThreadState());
+        // System.out.println(ti.getThreadName() + " --> " + ti.getThreadState());
         switch (ti.getThreadState()) {
           case BLOCKED:
           case WAITING:
-            stucked.add(ti);
+            stuck.add(ti);
             break;
-          default: 
+          default:
             deadlock = false;
         }
       }
-      if (deadlock) {
-        System.err.println("Deadlock detected!");
-        for (ThreadInfo ti : stucked) {
-          System.err.printf("Stack trace for %s => %n", ti.getThreadName());
-          StackTraceElement[] st = ti.getStackTrace();
-          for (int i = st.length - 1; i >= 0; i--) {
-            StringBuilder sb = new StringBuilder();
-            for (int j = st.length - i; j >= 0; j--) {
-              sb.append("  ");
-            }
-            sb.append(st[i].toString());
-            System.err.println(sb.toString());
-          }
-        }
-        System.exit(1);
+      if (!deadlock) {
+        deadlock_suspected = 0;
+        continue;
       }
+      deadlock_suspected ++;
+      if (deadlock_suspected < MAX_RETRIES) {
+        continue; // May be a false positive (unfortunately ThreadMXBean may not report the state accurately)
+      }
+      System.err.println("Deadlock detected!");
+      for (ThreadInfo ti : stuck) {
+        System.err.printf("Stack trace for %s => %n", ti.getThreadName());
+        StackTraceElement[] st = ti.getStackTrace();
+        for (int i = st.length - 1; i >= 0; i--) {
+          StringBuilder sb = new StringBuilder();
+          for (int j = st.length - i; j >= 0; j--) {
+            sb.append("  ");
+          }
+          sb.append(st[i].toString());
+          System.err.println(sb.toString());
+        }
+      }
+      System.exit(1);
     }
   }
 }
