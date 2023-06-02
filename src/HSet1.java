@@ -112,7 +112,7 @@ public class HSet1<E> implements IHSet<E> {
           Thread.currentThread().interrupt();
         }
       }
-    } finally {
+    } finally
       lock.unlock();
     }
   }
