@@ -1,4 +1,4 @@
 #! /bin/bash
-$(dirname $0)/compile.sh
 . $(dirname $0)/env.sh
-java -ea -cp $CLASSPATH SetTest1 $*
+java -cp $CLASSPATH SetTest1 $*
+read -s -n 1 -p "Press any key to continue . . ."

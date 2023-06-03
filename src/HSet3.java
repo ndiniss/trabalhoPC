@@ -101,11 +101,18 @@ public class HSet3<E> implements IHSet<E> {
     }
 
     private boolean nodeContainsElement(Node<E> node, E value) {
-        if(node == null) { return false; }
-        if(node.elem.equals(value)){ return true; }
-        if(node.next == null){ return false; }
+        // if(node == null) { return false; }
+        // if(node.elem.equals(value)){ return true; }
+        // if(node.next == null){ return false; }
 
-        return nodeContainsElement(node.next, value);
+        // return nodeContainsElement(node.next, value);
+
+        Node<E> searchNode = node;
+        while(searchNode != null){
+            if(searchNode.elem.equals(value)){ return true; }
+            searchNode = searchNode.next;
+        }
+        return false;
     }
 
     @Override
@@ -127,15 +134,11 @@ public class HSet3<E> implements IHSet<E> {
         getWriteLock(elem).lock();
         try {
             Node<E> firstNode = getEntry(elem);
-            boolean nodeContainsElement = contains(elem);
+            boolean nodeContainsElement = nodeContainsElement(firstNode, elem);
             if (!nodeContainsElement) {
-                if (firstNode == null) {
-                    table[getEntryIndex(elem)] = new Node<E>(elem, null);
-                } else {
-                    table[getEntryIndex(elem)] = new Node<E>(elem, firstNode);
-                }
-                this.size.incrementAndGet();
+                table[getEntryIndex(elem)] = new Node<E>(elem, firstNode);
                 getCondition(elem).signalAll(); // there may be threads waiting in waitEleme
+                this.size.incrementAndGet();
             }
             return !nodeContainsElement;
         } finally {
@@ -161,12 +164,12 @@ public class HSet3<E> implements IHSet<E> {
                     while(!nodeBefore.next.equals(nodeElement)){nodeBefore = nodeBefore.next;}
                     nodeBefore.next = nodeElement.next;
                 }
-                this.size.decrementAndGet();
                 getCondition(elem).signalAll(); // there may be threads waiting in waitEleme
+                this.size.decrementAndGet();
             }
             return nodeContainsElement;
         } finally {
-            getWriteLock(elem).unlock();
+            getWriteLock(elem).unlock();            
         }
     }
 
@@ -197,11 +200,14 @@ public class HSet3<E> implements IHSet<E> {
                     getCondition(elem).await();
                 }
                 catch(InterruptedException e) { 
-                    // Ignore interrupts
+                    e.printStackTrace();
                 }
             }  
         } finally {
-            getWriteLock(elem).unlock();
+            WriteLock wLock = getWriteLock(elem);
+            if(wLock.isHeldByCurrentThread()){
+                wLock.unlock();
+            }
         }
     }
     

@@ -2,10 +2,13 @@
 
 CLASSPATH=''
 
-LIB_DIR="$(dirname $0)/lib"
-for file in $(ls $LIB_DIR); do
+EXTERNAL_LIB_DIR="$(dirname $0)/external/lib"
+for file in $(ls $EXTERNAL_LIB_DIR); do
   # echo $file
-  CLASSPATH+="$LIB_DIR/$file:"
+  CLASSPATH+="$EXTERNAL_LIB_DIR/$file;"
+
+  echo "added $EXTERNAL_LIB_DIR/$file;"
 done
 
 CLASSPATH+="$(dirname $0)/classes"
+echo "added $(dirname $0)/classes"

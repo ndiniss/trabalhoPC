@@ -1,4 +1,3 @@
 #! /bin/bash
-$(dirname $0)/compile.sh
-. $(dirname $0)/env.sh
-java -ea -cp $CLASSPATH SetTest2 $*
+export SUT_CLASS=$1
+$(dirname $0)/external/bin/cjunitp SetTest2
