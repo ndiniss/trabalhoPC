@@ -73,12 +73,12 @@ public class HSet3<E> implements IHSet<E> {
     }
     private void lockAllWriteLocks(){
         for (int i = 0; i < locks.length; i++) {
-            locks[i].readLock().lock();
+            locks[i].writeLock().lock();
         }
     }
     private void unlockAllWriteLocks() {
         for (int i = 0; i < locks.length; i++) {
-            locks[i].readLock().unlock();
+            locks[i].writeLock().unlock();
         }
     }
 
@@ -87,18 +87,13 @@ public class HSet3<E> implements IHSet<E> {
     private Node<E> getEntry(E elem) {
         return table[getEntryIndex(elem)];
     }
-    private Node<E> getEntryFromTable(E elem, Node<E>[] tab) {
-        return tab[getEntryIndexFromTable(elem, tab)];
-    }
 
     private int getEntryIndex(E elem) {
         return Math.abs(elem.hashCode() % table.length);
     }
-    private int getEntryIndexFromTable(E elem, Node<E>[] tab){
-        return Math.abs(elem.hashCode() % tab.length);
-    }
 
     private Node<E> getNodeElement(Node<E> node, E value) {
+        if(node == null) { return null; }
         if(node.elem.equals(value)){ return node; }
         if(node.next == null){ return null; }
 
@@ -106,6 +101,7 @@ public class HSet3<E> implements IHSet<E> {
     }
 
     private boolean nodeContainsElement(Node<E> node, E value) {
+        if(node == null) { return false; }
         if(node.elem.equals(value)){ return true; }
         if(node.next == null){ return false; }
 
@@ -131,9 +127,13 @@ public class HSet3<E> implements IHSet<E> {
         getWriteLock(elem).lock();
         try {
             Node<E> firstNode = getEntry(elem);
-            boolean nodeContainsElement = nodeContainsElement(firstNode, elem);
+            boolean nodeContainsElement = contains(elem);
             if (!nodeContainsElement) {
-                table[getEntryIndex(elem)] = new Node<E>(elem, firstNode);
+                if (firstNode == null) {
+                    table[getEntryIndex(elem)] = new Node<E>(elem, null);
+                } else {
+                    table[getEntryIndex(elem)] = new Node<E>(elem, firstNode);
+                }
                 this.size.incrementAndGet();
                 getCondition(elem).signalAll(); // there may be threads waiting in waitEleme
             }
@@ -152,10 +152,15 @@ public class HSet3<E> implements IHSet<E> {
         try {
             Node<E> firstNode = getEntry(elem);
             Node<E> nodeElement = getNodeElement(firstNode, elem);
-            boolean nodeContainsElement = !nodeElement.equals(null);
+            boolean nodeContainsElement = nodeElement != null;
             if (nodeContainsElement) {
-                nodeElement.next = null;
-                table[getEntryIndex(elem)] = firstNode;
+                if (nodeElement.equals(firstNode)) {
+                    table[getEntryIndex(elem)] = nodeElement.next;
+                } else {
+                    Node<E> nodeBefore = firstNode;
+                    while(!nodeBefore.next.equals(nodeElement)){nodeBefore = nodeBefore.next;}
+                    nodeBefore.next = nodeElement.next;
+                }
                 this.size.decrementAndGet();
                 getCondition(elem).signalAll(); // there may be threads waiting in waitEleme
             }
@@ -205,34 +210,43 @@ public class HSet3<E> implements IHSet<E> {
         lockAllLocks();
         try {
             Node<E>[] oldTable = table;
-            Node<E>[] newTable = Node.createTable(2 * oldTable.length);
+            table = Node.createTable(2 * oldTable.length);
 
             for (Node<E> node : oldTable) {
-                if (node.equals(null)) { continue; }
-
+                if (node == null) { continue; }
+                
                 Node<E> searchNode = node;
-                while(!searchNode.next.equals(null)) {
-                    addIntoTable(newTable, searchNode.elem);
+                while(searchNode.next != null) {
+                    addWithoutLocks(searchNode.elem);
                     searchNode = searchNode.next;
                 }
-                addIntoTable(newTable, searchNode.elem);
+                addWithoutLocks(searchNode.elem);
             }
-            table = newTable;
         } finally {
             unlockAllLocks();
         }
     }
 
-    private void addIntoTable(Node<E>[] tab, E elem){
-        Node<E> node = getEntryFromTable(elem, tab);
-        if (node.equals(null)) {
-            node = new Node<E>(elem, null);
-            tab[getEntryIndexFromTable(elem, tab)] = node; 
-        } else {
-            while(!node.next.equals(null)){
-                node = node.next;
+    private boolean addWithoutLocks(E elem) {
+        if (elem == null) {
+            throw new IllegalArgumentException();
+        }
+        // getWriteLock(elem).lock();
+        try {
+            Node<E> firstNode = getEntry(elem);
+            boolean nodeContainsElement = nodeContainsElement(firstNode, elem);
+            if (!nodeContainsElement) {
+                if (firstNode == null) {
+                    table[getEntryIndex(elem)] = new Node<E>(elem, null);
+                } else {
+                    table[getEntryIndex(elem)] = new Node<E>(elem, firstNode);
+                }
+                // this.size.incrementAndGet();
+                // getCondition(elem).signalAll(); // there may be threads waiting in waitEleme
             }
-            node.next = new Node<E>(elem, null);
+            return !nodeContainsElement;
+        } finally {
+            // getWriteLock(elem).unlock();
         }
     }
 }
